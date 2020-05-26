@@ -5,9 +5,25 @@
  *      Author: Michele Gazzarri
  */
 
+
 #ifndef MLX90614_H_
 #define MLX90614_H_
 
+#include <assert.h>
+#include <stdio.h>
+#include <stdint.h>
+#include <string.h>
+//#include "stm32f3xx_hal.h"
+
+#define UNUSED(X) (void)X
+#if defined ( __GNUC__ ) && !defined (__CC_ARM) /* GNU Compiler */
+  #ifndef __weak
+    #define __weak   __attribute__((weak))
+  #endif /* __weak */
+  #ifndef __packed
+    #define __packed __attribute__((__packed__))
+  #endif /* __packed */
+#endif /* __GNUC__ */
 
 
 #endif /* MLX90614_H_ */
@@ -48,10 +64,17 @@
 #define MLX90614_DBG_MSG_R 1
 
 /* Exported functions prototypes ---------------------------------------------*/
-uint8_t CRC8_Calc(uint8_t*, const uint8_t);
-void MLX90614_WriteReg(uint8_t, uint8_t, uint16_t);
-uint16_t MLX90614_ReadReg(uint8_t, uint8_t, uint8_t);
-float MLX90614_ReadTemp(uint8_t, uint8_t);
+uint8_t CRC8_Calc (uint8_t *p, uint8_t len);
+void MLX90614_WriteReg(uint8_t devAddr, uint8_t regAddr, uint16_t data);
+uint16_t MLX90614_ReadReg(uint8_t devAddr, uint8_t regAddr, uint8_t dbg_lvl);
+float MLX90614_ReadTemp(uint8_t devAddr, uint8_t regAddr);
 void MLX90614_ScanDevices (void);
-void MLX90614_SendDebugMsg(uint8_t, uint8_t, uint8_t, uint16_t, uint8_t, uint8_t);
+void MLX90614_SendDebugMsg(uint8_t op_type, uint8_t devAddr, uint8_t regAddr, uint16_t data, uint8_t crc_in, uint8_t crc_calc);
+
+/* These functions should be implemented by user */
+void send_str(char* str, uint16_t len);
+void i2c_send(uint16_t devAddr, uint8_t* data, uint16_t len);
+void i2c_read(uint16_t devAddr, uint16_t RegAddr, uint8_t* buffer, uint16_t len);
+uint8_t isI2CReady(uint16_t DevAddress);
+void delay(uint32_t ms);
 
