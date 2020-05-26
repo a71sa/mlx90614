@@ -5,17 +5,12 @@
  *      Author: Michele Gazzarri
  */
 
-#include <assert.h>
-#include <stdio.h>
-#include <stdint.h>
-#include <string.h>
-#include "stm32f4xx_hal.h"
 #include "mlx90614.h"
 
-extern I2C_HandleTypeDef hi2c3;
 char temp_buff[128] = {};
 
-static const uint8_t crc_table[] = {
+static const uint8_t crc_table[] =
+{
     0x00, 0x07, 0x0e, 0x09, 0x1c, 0x1b, 0x12, 0x15, 0x38, 0x3f, 0x36, 0x31,
     0x24, 0x23, 0x2a, 0x2d, 0x70, 0x77, 0x7e, 0x79, 0x6c, 0x6b, 0x62, 0x65,
     0x48, 0x4f, 0x46, 0x41, 0x54, 0x53, 0x5a, 0x5d, 0xe0, 0xe7, 0xee, 0xe9,
@@ -40,20 +35,57 @@ static const uint8_t crc_table[] = {
     0xfa, 0xfd, 0xf4, 0xf3
 };
 
-uint8_t CRC8_Calc (uint8_t *p, uint8_t len) {
-        uint16_t i;
-        uint16_t crc = 0x0;
-
-        while (len--) {
-                i = (crc ^ *p++) & 0xFF;
-                crc = (crc_table[i] ^ (crc << 8)) & 0xFF;
-        }
-
-        return crc & 0xFF;
+/* Delay for ms milliseconds */
+__weak void delay(uint32_t ms)
+{
+	UNUSED(ms);
 }
 
-void MLX90614_WriteReg(uint8_t devAddr, uint8_t regAddr, uint16_t data) {
+/* Check if device with address = DevAddress is available on i2c bus
+ * Returns:
+ * 	0 - device is not available (not present on bus)
+ * 	1 - device is available (present on bus)
+ */
+__weak uint8_t isI2CReady(uint16_t DevAddress)
+{
+	UNUSED(DevAddress);
+	return 0;
+}
 
+/* Sends len bytes of string str using user defined interface */
+__weak void send_str(char* str, uint16_t len)
+{
+	UNUSED(str);
+}
+
+/* Sends len bytes of data to device with 7-bit address devAddr using i2c */
+__weak void i2c_send(uint16_t devAddr, uint8_t* data, uint16_t len)
+{
+	UNUSED(devAddr);
+}
+
+/* Reads len bytes from device with 7-bit address devAddr to buffer using i2c */
+__weak void i2c_read(uint16_t devAddr, uint16_t RegAddr, uint8_t* buffer, uint16_t len)
+{
+	UNUSED(devAddr);
+}
+
+uint8_t CRC8_Calc (uint8_t *p, uint8_t len)
+{
+	uint16_t i;
+	uint16_t crc = 0x0;
+
+	while (len--)
+	{
+		i = (crc ^ *p++) & 0xFF;
+		crc = (crc_table[i] ^ (crc << 8)) & 0xFF;
+	}
+
+	return crc & 0xFF;
+}
+
+void MLX90614_WriteReg(uint8_t devAddr, uint8_t regAddr, uint16_t data)
+{
 	uint8_t i2cdata[4], temp[4];
 
 	temp[0] = (devAddr << 1);
@@ -69,8 +101,8 @@ void MLX90614_WriteReg(uint8_t devAddr, uint8_t regAddr, uint16_t data) {
 	i2cdata[2] = temp[3]; //Delete-Byte, high
 	i2cdata[3] = CRC8_Calc(temp, 4); //CRC8-checksum calculation: http://www.sunshine2k.de/coding/javascript/crc/crc_js.html
 
-	HAL_I2C_Master_Transmit(&hi2c3, (devAddr << 1), i2cdata, 4, 0xFFFF);
-	HAL_Delay(10);
+	i2c_send(devAddr, i2cdata, 4);
+	delay(10);
 
 	MLX90614_SendDebugMsg(MLX90614_DBG_MSG_W, devAddr, i2cdata[0], (i2cdata[1] <<8 | i2cdata[2]), i2cdata[3], 0x00);
 
@@ -82,15 +114,17 @@ void MLX90614_WriteReg(uint8_t devAddr, uint8_t regAddr, uint16_t data) {
 	i2cdata[2] = temp[3]; //Delete-Byte, high
 	i2cdata[3] = CRC8_Calc(temp, 4); //CRC8-checksum calculation: http://www.sunshine2k.de/coding/javascript/crc/crc_js.html
 
-	HAL_I2C_Master_Transmit(&hi2c3, (devAddr << 1), i2cdata, 4, 0xFFFF);
-	HAL_Delay(10);
+	i2c_send(devAddr, i2cdata, 4);
+	delay(10);
 	MLX90614_SendDebugMsg(MLX90614_DBG_MSG_W, devAddr, i2cdata[0], data, i2cdata[3], 0x00);
 }
-uint16_t MLX90614_ReadReg(uint8_t devAddr, uint8_t regAddr, uint8_t dbg_lvl) {
+
+uint16_t MLX90614_ReadReg(uint8_t devAddr, uint8_t regAddr, uint8_t dbg_lvl)
+{
 	uint16_t data;
 	uint8_t in_buff[3], crc_buff[5], crc;
 
-	HAL_I2C_Mem_Read(&hi2c3, (devAddr<<1), regAddr, 1, in_buff, 3, 100);
+	i2c_read(devAddr, regAddr, in_buff, 3);
 
 	// For a read word command, in the crc8 calculus, you have to include [SA_W, Command, SA_R, LSB, MSB]
 	crc_buff[0] = (devAddr<<1);
@@ -103,49 +137,60 @@ uint16_t MLX90614_ReadReg(uint8_t devAddr, uint8_t regAddr, uint8_t dbg_lvl) {
 	data = (in_buff[1] <<8 | in_buff[0]);
 
 	//TODO: implement CRC8 check on data received
-	if (crc != in_buff[2]) {
+	if (crc != in_buff[2])
+	{
 		data = 0x0000;
 	}
-	if(dbg_lvl == MLX90614_DBG_ON)	MLX90614_SendDebugMsg(MLX90614_DBG_MSG_R, devAddr, regAddr, data, in_buff[2], crc);
+	if(dbg_lvl == MLX90614_DBG_ON)
+	{
+		MLX90614_SendDebugMsg(MLX90614_DBG_MSG_R, devAddr, regAddr, data, in_buff[2], crc);
+	}
 
-	//HAL_Delay(1);
 	return data;
 }
-float MLX90614_ReadTemp(uint8_t devAddr, uint8_t regAddr) {
+
+float MLX90614_ReadTemp(uint8_t devAddr, uint8_t regAddr)
+{
 	float temp;
 	uint16_t data;
 
 	data = MLX90614_ReadReg(devAddr, regAddr, MLX90614_DBG_OFF);
-	temp = data*0.02 - 273.15;
+	temp = data*0.02f - 273.15f;
 
 	return temp;
 }
-void MLX90614_ScanDevices (void) {
-	HAL_StatusTypeDef result;
+
+void MLX90614_ScanDevices (void)
+{
+	uint8_t result;
 	for (int i = 0; i<128; i++)
-		  {
-			  result = HAL_I2C_IsDeviceReady(&hi2c3, (uint16_t) (i<<1), 2, 2);
-			  if (result != HAL_OK)
-			  {
-				  sprintf(temp_buff, ".");
-				  CDC_Transmit_FS(temp_buff, strlen((const char *)temp_buff));
-			  }
-			  if (result == HAL_OK)
-			  {
-				  sprintf(temp_buff, "0x%X", i);
-				  CDC_Transmit_FS(temp_buff, strlen((const char *)temp_buff));
-
-			  }
-		  }
+	{
+		result = isI2CReady(i);
+		if (result != 1)
+		{
+			sprintf(temp_buff, ".");
+			send_str(temp_buff, strlen((const char *)temp_buff));
+		}
+		else
+		{
+			sprintf(temp_buff, "0x%X", i);
+			send_str(temp_buff, strlen((const char *)temp_buff));
+		}
+	}
 }
-void MLX90614_SendDebugMsg(uint8_t op_type, uint8_t devAddr, uint8_t regAddr, uint16_t data, uint8_t crc_in, uint8_t crc_calc) {
-	if(op_type == MLX90614_DBG_MSG_W) {
-		snprintf(temp_buff, sizeof(temp_buff), "W Dev: 0x%02X, Reg: 0x%02X, Data: 0x%04X, CRC8_calc:0x%02X\r\n", devAddr, regAddr, data, crc_calc);
-		CDC_Transmit_FS(temp_buff, strlen((const char *)temp_buff));
-	}
-	else if (op_type == MLX90614_DBG_MSG_R) {
-		snprintf(temp_buff, sizeof(temp_buff), "R Dev: 0x%02X, Reg: 0x%02X, Data: 0x%04X, CRC8_in:0x%02X, CRC8_calc:0x%02X\r\n", devAddr, regAddr, data, crc_in, crc_calc);
-		CDC_Transmit_FS(temp_buff, strlen((const char *)temp_buff));
-	}
 
+void MLX90614_SendDebugMsg(uint8_t op_type, uint8_t devAddr, uint8_t regAddr, uint16_t data, uint8_t crc_in, uint8_t crc_calc)
+{
+	if(op_type == MLX90614_DBG_MSG_W)
+	{
+		snprintf(temp_buff, sizeof(temp_buff), "W Dev: 0x%02X, Reg: 0x%02X, Data: 0x%04X, CRC8_calc:0x%02X\r\n",
+				devAddr, regAddr, data, crc_calc);
+		send_str(temp_buff, strlen((const char *)temp_buff));
+	}
+	else if (op_type == MLX90614_DBG_MSG_R)
+	{
+		snprintf(temp_buff, sizeof(temp_buff), "R Dev: 0x%02X, Reg: 0x%02X, Data: 0x%04X, CRC8_in:0x%02X, CRC8_calc:0x%02X\r\n",
+				devAddr, regAddr, data, crc_in, crc_calc);
+		send_str(temp_buff, strlen((const char *)temp_buff));
+	}
 }
