@@ -1,2 +1,5 @@
 # mlx90614
-C Library for STM32 using HAL libs to manage a Melexis MLX90614 sensor
+Light modification of Michele Gazzarri's library
+Some syntaxis corrections.
+Moved out output functions form library.
+Moved out every stuff about certain STM32 MCU.
